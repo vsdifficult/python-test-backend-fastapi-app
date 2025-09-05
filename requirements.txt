@@ -1,0 +1,4 @@
+sqlalchemy
+pydantic
+jwt
+bcrypt
