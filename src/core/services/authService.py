@@ -1,109 +1,73 @@
 import uuid
 import bcrypt
 import jwt
+import random
+import os
 from datetime import datetime, timedelta
-
+from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.repositories.user_repository import UserRepository
-from src.models.dto.UserDto import UserDto, UserLogin, UserRegistration
-from src.models.dto.AuthDto import AuthModel, UserRole
+from src.models.dto.UserDto import UserRegistration, UserLogin 
+from src.models.dto.AuthDto import AuthModel
+from src.models.enums import UserRole
 
+load_dotenv()
 
-SECRET_KEY = "super_secret_key"   
+SECRET_KEY = os.getenv("JWT_SECRET", "fallback_secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-
 class AuthService:
-    def __init__(self, session):
-        self.user_repository = UserRepository()
-        self.session = session   
+    def __init__(self):
+        self.repo = UserRepository()
 
-    async def sign_up(self, user_body: UserRegistration) -> AuthModel:
-        """
-        Регистрация нового пользователя.
-        """
-        existing_user = await self.user_repository.get_by_email(self.session, user_body.email)
-        if existing_user:
-            raise ValueError("User with this email already exists")
+    async def sign_up(self, session: AsyncSession, body: UserRegistration):
+        if await self.repo.get_by_email(session, body.email):
+            raise ValueError("User already exists")
+        hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+        user = await self.repo.create(session, body.name, body.email, hashed, body.role.value)
+        return {"message": "User registered successfully"}
 
-        hashed_password = bcrypt.hashpw(user_body.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    async def login(self, session: AsyncSession, body: UserLogin):
+        user = await self.repo.get_by_email(session, body.email)
+        if not user or not bcrypt.checkpw(body.password.encode(), user.password.encode()):
+            raise ValueError("Invalid credentials")
+        access_token = self._create_token(user.id, user.role, ACCESS_TOKEN_EXPIRE_MINUTES)
+        refresh_token, expire = self._create_refresh_token(user.id, user.role)
+        await self.repo.save_refresh_token(session, user.id, refresh_token, expire)
+        return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
-        user_dto = UserDto(
-            id=uuid.uuid4(),
-            email=user_body.email,
-            username=user_body.username,
-            password_hash=hashed_password,
-            role=UserRole.USER
-        )
+    async def send_verification_email(self, session: AsyncSession, email: str):
+        code = random.randint(100000, 999999)
+        expire_at = datetime.utcnow() + timedelta(minutes=10)
+        return await self.repo.set_verification_code(session, email, code, expire_at)
 
-        created_user = await self.user_repository.create_async(self.session, user_dto)
-
-        access_token = self._create_token(created_user.id, created_user.role, ACCESS_TOKEN_EXPIRE_MINUTES)
-        refresh_token = self._create_token(created_user.id, created_user.role, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60)
-
-        return AuthModel(
-            success=True,
-            user_id=created_user.id,
-            role=created_user.role,
-            access_token=access_token,
-            refresh_token=refresh_token
-        )
-
-    async def sign_in(self, user_body: UserLogin) -> AuthModel:
-        """
-        Авторизация пользователя.
-        """
-        user = await self.user_repository.get_by_email(self.session, user_body.email)
+    async def verification_email(self, session: AsyncSession, email: str, code: int):
+        user = await self.repo.get_by_email(session, email)
         if not user:
             raise ValueError("User not found")
-
-        if not bcrypt.checkpw(user_body.password.encode("utf-8"), user.password_hash.encode("utf-8")):
-            raise ValueError("Invalid password")
-
+        if user.code != code or not user.code_expire or user.code_expire < datetime.utcnow():
+            raise ValueError("Invalid or expired code")
         access_token = self._create_token(user.id, user.role, ACCESS_TOKEN_EXPIRE_MINUTES)
-        refresh_token = self._create_token(user.id, user.role, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60)
+        refresh_token, expire = self._create_refresh_token(user.id, user.role)
+        await self.repo.save_refresh_token(session, user.id, refresh_token, expire)
+        return AuthModel(success=True, user_id=user.id, role=UserRole(user.role), access_token=access_token, refresh_token=refresh_token)
 
-        return AuthModel(
-            success=True,
-            user_id=user.id,
-            role=user.role,
-            access_token=access_token,
-            refresh_token=refresh_token
-        )
+    async def refresh(self, session: AsyncSession, token: str):
+        refresh = await self.repo.get_refresh_token(session, token)
+        if not refresh or refresh.expire_at < datetime.utcnow():
+            raise ValueError("Refresh token expired")
+        access_token = self._create_token(refresh.user_id, UserRole.USER, ACCESS_TOKEN_EXPIRE_MINUTES)
+        return {"access_token": access_token, "refresh_token": token}
 
-    async def verification_email(self, email: str, code: int) -> AuthModel:
-        """
-        Подтверждение email (заглушка).
-        """
-        user = await self.user_repository.get_by_email(self.session, email)
-        if not user:
-            raise ValueError("User not found")
-        
-        if code != 1234: 
-            raise ValueError("Invalid verification code")
+    def _create_token(self, user_id: str, role: str, expire_minutes: int):
+        expire = datetime.utcnow() + timedelta(minutes=expire_minutes)
+        payload = {"sub": user_id, "role": role, "exp": expire}
+        return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-        access_token = self._create_token(user.id, user.role, ACCESS_TOKEN_EXPIRE_MINUTES)
-        refresh_token = self._create_token(user.id, user.role, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60)
-
-        return AuthModel(
-            success=True,
-            user_id=user.id,
-            role=user.role,
-            access_token=access_token,
-            refresh_token=refresh_token
-        )
-
-    def _create_token(self, user_id: uuid.UUID, role: UserRole, expires_minutes: int) -> str:
-        """
-        Генерация JWT токена.
-        """
-        expire = datetime.utcnow() + timedelta(minutes=expires_minutes)
-        payload = {
-            "sub": str(user_id),
-            "role": role,
-            "exp": expire
-        }
-        return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM) 
-
-    
+    def _create_refresh_token(self, user_id: str, role: str):
+        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        payload = {"sub": user_id, "role": role, "exp": expire, "type": "refresh"}
+        token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+        return token, expire

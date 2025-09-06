@@ -1,23 +1,23 @@
 from pydantic import BaseModel
-from src.models.enums import UserRole 
+from src.models.enums import UserRole
+import uuid
 
-import uuid 
-
-class UserDto(BaseModel): 
-    id: uuid.UUID
-    name: str 
+class UserRegistration(BaseModel):
+    name: str
     email: str
-    password: str 
-    verify_code: int  
-    role: UserRole
-    is_verify: bool  
-
-class UserRegistration(BaseModel): 
-    role: UserRole
-    email: str 
-    name: str 
-    password: str 
-
-class UserLogin(BaseModel): 
-    email: str 
     password: str
+    role: UserRole = UserRole.USER
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserDto(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: str
+    password: str
+    role: UserRole
+    code: int | None = None
+    code_expire: str | None = None
+

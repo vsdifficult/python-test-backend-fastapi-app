@@ -1,4 +1,9 @@
 sqlalchemy
 pydantic
 jwt
-bcrypt
+bcrypt 
+fastapi 
+uvicorn 
+asyncpg
+python-dotenv 
+aiosqlite

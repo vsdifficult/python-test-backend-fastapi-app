@@ -1,5 +1,5 @@
-from enum import IntEnum
+from enum import Enum
 
-class UserRole(IntEnum): 
-    Admin = 0
-    User = 1
+class UserRole(str, Enum):
+    USER = "USER"
+    ADMIN = "ADMIN"
