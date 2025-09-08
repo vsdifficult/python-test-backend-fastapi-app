@@ -6,10 +6,10 @@ import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.repositories.user_repository import UserRepository
-from src.models.dto.UserDto import UserRegistration, UserLogin 
-from src.models.dto.AuthDto import AuthModel
-from src.models.enums import UserRole
+from src.domain.repositories.user_repository import UserRepository
+from src.domain.models.dto.UserDto import UserRegistration, UserLogin 
+from src.domain.models.dto.AuthDto import AuthModel
+from src.domain.models.enums import UserRole
 
 load_dotenv()
 
@@ -26,7 +26,7 @@ class AuthService:
         if await self.repo.get_by_email(session, body.email):
             raise ValueError("User already exists")
         hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
-        user = await self.repo.create(session, body.name, body.email, hashed, body.role.value)
+        await self.repo.create(session, body.name, body.email, hashed, body.role.value)
         return {"message": "User registered successfully"}
 
     async def login(self, session: AsyncSession, body: UserLogin):
@@ -36,7 +36,7 @@ class AuthService:
         access_token = self._create_token(user.id, user.role, ACCESS_TOKEN_EXPIRE_MINUTES)
         refresh_token, expire = self._create_refresh_token(user.id, user.role)
         await self.repo.save_refresh_token(session, user.id, refresh_token, expire)
-        return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+        return AuthModel(success=True, user_id=user.id, role=UserRole(user.role), access_token=access_token, refresh_token=refresh_token)
 
     async def send_verification_email(self, session: AsyncSession, email: str):
         code = random.randint(100000, 999999)

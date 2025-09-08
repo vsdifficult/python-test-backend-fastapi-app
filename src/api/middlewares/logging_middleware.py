@@ -2,7 +2,6 @@ import time
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-
 class LoggingMiddleware(BaseHTTPMiddleware):
     """
     Middleware для логирования всех запросов

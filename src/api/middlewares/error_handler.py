@@ -1,7 +1,7 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from src.errors.authError import AuthError
+from src.core.errors.authError import AuthError
 
 class AuthErrorMiddleware(BaseHTTPMiddleware):
     """

@@ -3,8 +3,8 @@ from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 
-from src.models.enums import UserRole
-from src.database import Base
+from src.domain.models.enums import UserRole
+from infrastructure.database import Base
 from datetime import datetime
 
 class UserEntity(Base):

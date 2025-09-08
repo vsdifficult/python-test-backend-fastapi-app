@@ -1,9 +1,11 @@
+fastapi
+uvicorn[standard]
 sqlalchemy
 pydantic
-jwt
-bcrypt 
-fastapi 
-uvicorn 
+bcrypt
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
 asyncpg
-python-dotenv 
-aiosqlite
+psycopg2-binary
+PyJWT

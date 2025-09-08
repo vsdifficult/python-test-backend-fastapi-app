@@ -1,8 +1,10 @@
+from datetime import datetime
+import uuid 
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.models.entities.UserModels import UserEntity, RefreshTokenEntity
-from src.models.dto import UserDto
-from datetime import datetime
+from src.domain.models.entities.UserModels import UserEntity, RefreshTokenEntity
+from src.domain.models.dto import UserDto
 
 class UserRepository:
     async def get_by_email(self, session: AsyncSession, email: str):
@@ -16,6 +18,22 @@ class UserRepository:
         await session.commit()
         await session.refresh(user)
         return user
+
+    async def get_by_id(self, session: AsyncSession, user_id: uuid.UUID):
+        result = await session.execute(select(UserEntity).filter(UserEntity.id == user_id))
+        user = result.scalar_one_or_none()
+        return user
+
+    async def delete_user(self, session: AsyncSession, user_id: uuid.UUID):
+        user = await self.get_by_id(session, user_id)
+        if user:
+            await session.delete(user)
+            return True
+        return False
+
+    async def get_all_users(self, session: AsyncSession, offset: int = 0, limit: int = 100):
+        result = await session.execute(select(UserEntity).offset(offset).limit(limit))
+        return result.scalars().all()
 
     async def set_verification_code(self, session: AsyncSession, email: str, code: int, expire_at: datetime):
         user = await self.get_by_email(session, email)

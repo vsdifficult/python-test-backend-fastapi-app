@@ -1,5 +1,5 @@
 from pydantic import BaseModel 
-from src.models.enums import UserRole 
+from src.domain.models.enums import UserRole 
 import uuid
 
 class AuthModel(BaseModel):
