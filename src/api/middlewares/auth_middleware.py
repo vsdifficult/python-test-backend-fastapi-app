@@ -13,7 +13,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/auth/register",
             "/auth/login",
             "/auth/send-code",
-            "/auth/verify-code"
+            "/auth/verify-code", 
+            "/admin/delete-user",
+            "/admin/get-all-users"
         ]
 
     async def dispatch(self, request: Request, call_next):
